@@ -935,7 +935,7 @@ mix(Soltarie.prototype, {
 			this.execPath(path);
 
 			var m = resolvePath(dept) + scorePath(path);
-
+			//console.log(m);
 			if(maxChoice < m){
 				maxChoice = m;
 				bestPath = i;
