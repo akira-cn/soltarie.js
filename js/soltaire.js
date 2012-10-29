@@ -527,8 +527,9 @@ mix(Soltarie.prototype, {
 	//得到第一张暗牌
 	getLastDarkCardInGroup : function(group){
 		cards = this.groups[group];
+		if(cards == null) return null;
+		
 		var ret = null;
-
 		for(var i = 0; i < cards.length; i++){
 			p = cards[i];
 			if(p.visible){
