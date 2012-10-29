@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<title>Soltaire</title>
+		<script src="js/qwrap-114-min.js"></script>
+		<script src="js/poker.js"></script>
+		<script src="js/soltaire.js"></script>
+		<style type="text/css">
+			canvas {
+				background-color: #009900;
+			}
+			body{
+				font: 12px/20px 宋体;
+			}
+			.content {
+				float:left;
+			}
+			.sidebar {
+				margin-left: 970px;
+			}
+
+			#txtCards {
+				width: 320px;
+				height: 100px;
+			}
+			#txtLogger {
+				margin-top: 9px;
+				width: 320px;
+				height: 450px;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<!--<div class="title">
+				Canvas 容器 ，点击标题展开或收缩
+			</div>-->
+			<div class="content" id="mainCanvas">
+				<canvas width="960" height="600"></canvas>
+			</div>
+			<div class="sidebar" id="controlBar">
+				<textarea id="txtCards"></textarea><br/>
+				<button id="btnRandomGame">随机</button>
+				<button id="btnNewGame">开始</button>
+				<button id="btnSolve" disabled="disabled">求解</button>
+				<button id="btnViewHeap" disabled="disabled">牌堆</button>
+				<button id="btnResolveHeap" disabled="disabled">恢复</button>
+				翻牌<select id="selHeapShows"><option>1</option><option>2</option><option selected="selected">3</option><select>
+				<select id="txtLogger" size="30">
+					<!--<option>开局</option>-->
+				</select> <!--操作步骤-->
+			</div>
+		</div>
+		<script src="js/game.js"></script>
+		<script src="js/player.js"></script>
+	</body>
+</html>
