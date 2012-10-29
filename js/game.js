@@ -110,7 +110,7 @@ W("#btnSolve").on("click", function(){
 			heapShows = soltarie.options.heapShows
 		}
 		cursor += heapShows;
-		if(cursor >= heap.length){
+		if(cursor - heapShows >= heap.length){
 			cursor = -1;
 		}
 		PokerPlayer.drawMovingHeap(heap, cursor, heapShows);

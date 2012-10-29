@@ -523,6 +523,21 @@ mix(Soltarie.prototype, {
 		}
 		return ret.reverse();
 	},
+	
+	//得到第一张暗牌
+	getLastDarkCardInGroup : function(group){
+		cards = this.groups[group];
+		var ret = null;
+
+		for(var i = 0; i < cards.length; i++){
+			p = cards[i];
+			if(p.visible){
+				break;
+			}
+			ret = p.card;
+		}
+		return ret;
+	},
 
 	//获得一组牌的最后一张可见牌
 	getLastCardInGroup : function(group){
@@ -839,19 +854,36 @@ mix(Soltarie.prototype, {
 	 */				 
 	solve : function(dept){ //dept 搜索深度
 		
-		dept = dept || 2;	//默认是2层
+		dept = dept || 2;	//默认是3层
 
 		var self = this;
 		var maxChoice = 0;
 		var bestPath = 0;	//最优路径
 		
 		this.cardsAutoCollect(true);
+
+		function scorePath(path){	
+			//计算一个路径的分数： 翻出越小的牌分数越高
+			var act = path[path.length - 1];	//找到路径的最后一步，这一步所在的组是被solveGroup的组
+			var score = 0;
+
+			if(act){
+				var res = self.findCard(act[0]);
+				if(res.group){
+					var c = self.getLastDarkCardInGroup(res.group);
+					if(c != null){
+						score += 14 - Soltarie.cardValue(c);
+					} 
+				}
+			}
+			return score;
+		}
 		
 		function resolvePath(d){
 			
 			var _paths = getAllPaths();
 			if(!d){
-				return _paths.length;
+				return _paths.length * 20;
 			}
 
 			var max = 0;
@@ -863,8 +895,12 @@ mix(Soltarie.prototype, {
 				//console.log([i, _paths]);
 				self.execPath(path);
 				//console.log('done');
-				
-				var m = resolvePath(d-1);
+				//console.log([path, scorePath(path)]);
+
+				/**
+				 * 优先选择分支数多的，如果一样多的话，那么优先选择暗牌点数小的
+				 */
+				var m = resolvePath(d-1) + scorePath(path);	
 				if(m > max){
 					max = m;
 				}
@@ -898,7 +934,7 @@ mix(Soltarie.prototype, {
 			//console.log(i);
 			this.execPath(path);
 
-			var m = resolvePath(dept);
+			var m = resolvePath(dept) + scorePath(path);
 
 			if(maxChoice < m){
 				maxChoice = m;
