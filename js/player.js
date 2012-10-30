@@ -54,7 +54,7 @@ function drawCollections(collections){
 	}
 }
 
-function drawHeap(heap, cursor, openCount){
+function drawHeap(heap, openedCards){
 
 	var x = 40 + pokerSize * 0.75;
 	
@@ -62,37 +62,17 @@ function drawHeap(heap, cursor, openCount){
 
 	context.drawEmptyCard(10, 10, pokerSize);
 	
-	for(var i = 0; i < heap.length; i++){
-		var pos = Math.floor(cursor / openCount) * openCount;
-		if(i <= cursor && i >= pos){	//可以显示
-			drawCard(x + (i - pos) * pokerSize * 0.3, 10, heap[i]);
-		}	
-
-		else if(i > cursor && ((i - cursor) % 2)){
+	var cursor = heap.indexOf(openedCards[openedCards.length - 1]);
+	for(var i = cursor + 1; i < heap.length; i++){		
+		if((i - cursor) % 2){
 			context.drawPokerBack(10  + i - cursor, 10, pokerSize);
 		}
 	}	
+
+	for(var i = 1; i < openedCards.length; i++){
+		drawCard(x + (i-1) * pokerSize * 0.3, 10, openedCards[i]);
+	}
 }
-
-function drawMovingHeap(heap, cursor, openCount){
-
-	var x = 40 + pokerSize * 0.75;
-	
-	context.clearRect(10, 10, pokerSize * 3, pokerSize);
-
-	context.drawEmptyCard(10, 10, pokerSize);
-	
-	for(var i = 0; i < heap.length; i++){
-		if(i <= cursor && i > cursor - openCount){	//可以显示
-			drawCard(x + (i + openCount - cursor - 1) * pokerSize * 0.3, 10, heap[i]);
-		}	
-
-		else if(i > cursor && ((i - cursor) % 2)){
-			context.drawPokerBack(10  + i - cursor, 10, pokerSize);
-		}
-	}	
-}
-
 
 function drawGroup(group, cards){
 	var x = 30 + 130 * (6 - group);
@@ -120,7 +100,6 @@ function drawGroup(group, cards){
 var Player = {
 	drawGroup : drawGroup,
 	drawHeap : drawHeap,
-	drawMovingHeap : drawMovingHeap,
 	drawCollections : drawCollections
 };
 

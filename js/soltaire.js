@@ -227,7 +227,6 @@ mix(Soltarie.prototype, {
 
 		this.heap = [];	//牌堆
 		this.groups = [[],[],[],[],[],[],[]];	//牌组
-		this.heapCursor = -1; //牌堆的指针
 		this.collections = {
 			'hearts' : 0,
 			'diamonds' : 0,
@@ -248,26 +247,50 @@ mix(Soltarie.prototype, {
 		this.heap = this.cards.slice(k);
 		this.saveStack = [];
 		
+		this.openedHeapCards = [null];
+		this.solveCache = {};
+
 		this.fire("newGame");
+	},
+	/**
+	 * 得到一个当前局面状态
+	 */
+	readState : function(name){
+		return JSON.stringify([this.collections, this.heap, this.groups, this.openedHeapCards, name]);
+	},
+	/**
+	 * 写入一个局面状态
+	 */
+	writeState: function(state, name){
+		var data = JSON.parse(state);
+		if(name == data[4]){
+			this.collections = data[0];
+			this.heap = data[1];
+			this.groups = data[2];
+			this.openedHeapCards = data[3];
+			return true;
+		}	
+		return false;
 	},
 	/**
 	 * 保存当前牌局状态
 	 */
 	save : function(name){
-		this.saveStack.push(JSON.stringify([this.collections, this.heap, this.groups, this.heapCursor, name]));
+		this.saveStack.push(this.readState(name));
 	},
 	/**
 	 * 恢复当前牌局状态到某个save
 	 */
 	restore : function(name){
-		var data = JSON.parse(this.saveStack.pop());
-		this.collections = data[0];
-		this.heap = data[1];
-		this.groups = data[2];
-		this.heapCursor = data[3];
-		if(name != null && data[4] != name){
-			this.restore(name);
+		var state = this.saveStack.pop();
+
+		if(state){
+			if(this.writeState(state, name)){
+				return true;
+			}
+			return this.restore(name);
 		}
+		return false;
 	},
 	/**
 	 * 不恢复，但是把之前的save抛弃掉
@@ -414,29 +437,89 @@ mix(Soltarie.prototype, {
  * 和牌堆有关的函数
  */
 mix(Soltarie.prototype, {
+	//查找、翻开牌堆直到某张牌出现在翻开的牌堆中
+	//同一张牌有可能出现两种不同的翻牌情况（两轮）
+	cardInOpenedHeaps : function(card){
+		var cardPos = this.heap.indexOf(card);
+		if(cardPos == -1){
+			throw new Error('card not in heap');
+		}
+		var openedHeapCards = this.openedHeapCards;
+		var heapShows = this.options.heapShows;
+		var ret = [];
+
+		var self = this;
+
+		function getOpenedHeapCardsByCursor(cursor){
+			if(cardPos > cursor){	
+				var dist = cardPos - cursor;	//先算一下距离
+				var oh = [];
+				do{
+					oh.unshift(self.heap[dist + cursor]);
+				}while(--dist % 3);
+
+				for(var i = oh.length, p = cardPos; i < heapShows; i++){
+					if(++p < self.heap.length){
+						oh.push(self.heap[p]);
+					}
+				}
+
+				oh.unshift(self.heap[dist + cursor]);
+				ret.push(oh);
+			}			
+		}
+
+		if(openedHeapCards.indexOf(card) > 0){	//如果已经在里面了，得到第一个分组
+			ret.push(openedHeapCards);	//第一轮
+		}
+		else{
+			//为了方便定位（牌堆可能被全部取完）
+			//第一个位置存放的是可见牌的前一张牌
+			var cursor = this.heap.indexOf(openedHeapCards[openedHeapCards.length - 1]);	
+			//如果这张卡在当前openedHeapCards后面，那么还有一组
+			getOpenedHeapCardsByCursor(cursor);
+		}
+
+		getOpenedHeapCardsByCursor(-1);
+
+		return ret;
+	},
 
 	removeFromHeap : function(card){
 		res = this.findCard(card);
+
 		if(res.heap >= 0){
-			this.heap.splice(res.heap, 1);
-			this.heapCursor = res.heap - 1;
+			var ohs = this.cardInOpenedHeaps(card);
+			var c1 = ohs[0] && ohs[0].pop(), c2 = ohs[1] && ohs[1].pop();
+			if(c1 != null && c1 == card){
+				this.openedHeapCards = ohs[0];
+				this.heap.splice(res.heap, 1);
+			}else if(c2 != null && c2 == card){
+				this.openedHeapCards = ohs[1];
+				this.heap.splice(res.heap, 1);
+			}else{
+				return null;	//不可见牌不能remove
+			}
 			return card;
 		}
 		return null;
 	},
 
 	isHeapVisible : function(i){
-		var cursor = this.heapCursor;
+		/*var cursor = this.heapCursor;
 		var c = i + 1;
 		return c == this.heap.length || 			//最后一张牌
 				!(c % this.options.heapShows) || 			//如果是3张牌，第2、5。。。以及最后一张
-				(i >= cursor && !((i - cursor) % this.options.heapShows));	//或者当前的位置往后的倍数	
+				(i >= cursor && !((i - cursor) % this.options.heapShows));	//或者当前的位置往后的倍数*/
+		var card = this.heap[i];
+		var ohs = this.cardInOpenedHeaps(card);
+		return !!(ohs[0] && card == ohs[0][ohs[0].length - 1] 
+			|| ohs[1] && card == ohs[1][ohs[1].length - 1]);
 	},
 
 	visibleCardsInHeap : function(cursor){
 		var ret = [];
 		if(cursor == null) cursor = this.heap.length;
-		if(cursor === true) cursor = this.heapCursor;	//取到当前位置为止
 
 		for(var i = 0; i < cursor && i < this.heap.length; i++){
 			if(this.isHeapVisible(i)){
@@ -444,24 +527,6 @@ mix(Soltarie.prototype, {
 			}
 		}
 		return ret;
-	},
-
-	//从pos位置得到下一张可见牌
-	nextVisibleCardPosFromHeap : function(pos){
-		if(this.heapCursor >= 0 && pos > this.heapCursor){	//如果比当前cusor来得大
-			var dis = pos - this.heapCursor; 	//看看差几个位置
-			var size = this.options.heapShows;
-
-			var p = pos + (size - (dis % size)) % size;
-			return p < this.heap.length ? p : -1;
-		}
-		//否则返回离pos最近的一个可见牌就行了
-		for(var i = pos; i < this.heap.length; i++){
-			if(this.isHeapVisible(i)){
-				return i;
-			}
-		}
-		return -1;
 	}
 });
 
@@ -624,33 +689,38 @@ mix(Soltarie.prototype, {
 			var res = self.findCard(card);
 			if(res.heap >= 0 && !res.visible){
 				//如果不可见，需要整理牌堆
-				
-				var tempPath = [];
+				var ohs = self.cardInOpenedHeaps(card);
 
-				self.save();
-				var cardsAfter = self.nextVisibleCardPosFromHeap(res.heap);
-				for(var i = cardsAfter; i > res.heap; i--){
-					var _card = self.heap[i];
-					var target = self.findTarget(_card);
+				for(var i = 0; i < ohs.length; i++){
+					var tempPath = [];
+					self.save();
 
-					if(target && target != group){ //target不能移动到当前group，否则会挡住
-						tempPath.push([_card, target]);
-						self.moveTo(_card, target);
-					}else{
-						tempPath.length = 0;
-						break;
+					var openedHeap = ohs[i];
+					self.openedHeapCards = openedHeap; //需要将openedHeap移过来，否则出问题
+					//console.log(openedHeap);
+					tempPath.push(['>', openedHeap.slice(0)]);	//移动牌堆
+
+					for(var j = openedHeap.length - 1; j > 0; j--){
+						var c = openedHeap[j];
+						
+						if(card == c){
+							self.dropRestore();	//成功了
+							path.push.apply(path, tempPath);
+							self.moveTo(card, group);
+							path.push([card, group]);						
+							return true;							
+						}
+						var target = self.findTarget(c);
+						if(target && target != group){ //target不能移动到当前group，否则会挡住
+							tempPath.push([c, target]);
+							self.moveTo(c, target);
+						}else{
+							break;	//失败
+						}						 
 					}
-				}
-				
-				if(tempPath.length > 0){
-					self.dropRestore();	//成功了
-					path.push.apply(path, tempPath);
-					self.moveTo(card, group);
-					path.push([card, group]);
-					return true;
+					self.restore();
 				}
 
-				self.restore();
 				return false;
 			}
 			return false;
@@ -658,6 +728,7 @@ mix(Soltarie.prototype, {
 
 		//彻底整理牌堆，移动牌堆前面的可移动牌
 		function resolveHeepCard(card){
+			
 			//得到当前卡牌前面的所有可见牌
 			//这些牌将影响到卡牌是否可被访问
 			var res = self.findCard(card);
@@ -734,13 +805,13 @@ mix(Soltarie.prototype, {
 				}
 				childCards = tmp;
 			}
-
-			lastCard = null;
 			
-			if(tryToBuildPath(childCards, moveVisibleHeapCard) 		//如果牌堆里面的牌可见，先移动可见牌
+			if(
+				tryToBuildPath(childCards, moveVisibleHeapCard) 		//如果牌堆里面的牌可见，先移动可见牌
 				|| tryToBuildPath(childCards, moveCollectionCard) 	//如果牌堆里面的牌不可见，看看整理区是否可以
 				|| tryToBuildPath(childCards, moveHeapCard) 		//如果也不可以，那么只好整理牌堆
-				|| tryToBuildPath(childCards, resolveHeepCard)) 	//如果也不可以，那么只好整理牌堆（方式2）
+				|| tryToBuildPath(childCards, resolveHeepCard)
+			 ) 	//如果也不可以，那么只好整理牌堆（方式2）
 			{ 
 				lastCard = this.getLastCardInGroup(group);
 			}else{
@@ -779,7 +850,11 @@ mix(Soltarie.prototype, {
 
 	//移动指定牌到某个目标
 	moveTo : function(card, target){
-		if(target != null && target >= 0){
+		if(card == '>'){	//移动牌堆
+			this.openedHeapCards = target;
+			return target;
+		}
+		else if(target != null && target >= 0){
 			return this.moveToGroup(target, card);
 		}
 		else{
@@ -847,7 +922,6 @@ mix(Soltarie.prototype, {
 
 		return solve(cards, group);
 	},
-
 	/**
 	 * 自动解牌的回溯算法
 	 * 因为游戏的目的是将所有的牌移动到整理区，因此：
@@ -855,13 +929,13 @@ mix(Soltarie.prototype, {
 	 */				 
 	solve : function(dept){ //dept 搜索深度
 		
-		dept = dept || 2;	//默认是3层
+		var branches = 0, cachedBranches = 0;	//搜索分支
+
+		dept = dept || 5;	//默认是5层
 
 		var self = this;
 		var maxChoice = 0;
 		var bestPath = 0;	//最优路径
-		
-		this.cardsAutoCollect(true);
 
 		function scorePath(path){	
 			//计算一个路径的分数： 翻出越小的牌分数越高
@@ -880,84 +954,94 @@ mix(Soltarie.prototype, {
 			return score;
 		}
 		
-		function resolvePath(d){
-			
-			var _paths = getAllPaths();
-			if(!d){
-				return _paths.length * 20;
+		function resolvePath(d, cache){
+			branches ++;
+
+			var paths;
+
+			if(cache && cache.paths){
+				//如果已经缓存了path，那么直接用path就好
+				//console.log(cache);
+				cachedBranches++;
+				paths = cache.paths;
 			}
 
-			var max = 0;
+			cache.paths = paths = getAllPaths();
 
-			for(var i = 0; i < _paths.length; i++){
-				var path = _paths[i];
+			if(!d){
+				return paths.length * 20;
+			}
+
+			var max = 0, bestPath = 0;
+
+			for(var i = 0; i < paths.length; i++){
+				var path = paths[i], m = 0;
+
 				self.save();
-				
-				//console.log([i, _paths]);
-				self.execPath(path);
-				//console.log('done');
-				//console.log([path, scorePath(path)]);
-
+				var state = cache["#"+path];
+				if(state){
+					self.writeState(state, "#path");
+				}else{
+					self.execPath(path);
+					cache["#"+path] = self.readState("#path");
+				} 
 				/**
 				 * 优先选择分支数多的，如果一样多的话，那么优先选择暗牌点数小的
 				 */
-				var m = resolvePath(d-1) + scorePath(path);	
+				cache[i] =	cache[i] || {};
+				m = resolvePath(d-1, cache[i]) + scorePath(path);	
+				self.restore();
+
 				if(m > max){
 					max = m;
+					if(d == dept){
+						bestPath = i;
+					}
 				}
-				self.restore();
 			}
 
+			if(d == dept){
+				self.solveCache = cache[bestPath] || {};
+				return paths[bestPath];
+			}
 			return max;
 		} 
 
 		function getAllPaths(){
-			var _paths = []; 
-			//console.log(self.showGame());
+			var paths = []; 
+
 			for(var i = 0; i < self.groups.length; i++){
 				var path = self.solveGroup(i);
 				if(path){
-					//console.log(i);
-					_paths.push(path);
+					paths.push(path);
 				}
-				//console.log([i,self.showGame()]);
 			}
-			//console.log(_paths);
-			//console.log(self.showGame());
-			return _paths;	//反过来先从牌多的列开始
+
+			return paths;	//反过来先从牌多的列开始
 		}
 
-		var paths = getAllPaths();
-
-		for(var i = 0; i < paths.length; i++){
-			var path = paths[i];
-			this.save();
-			//console.log(i);
-			this.execPath(path);
-
-			var m = resolvePath(dept) + scorePath(path);
-			//console.log(m);
-			if(maxChoice < m){
-				maxChoice = m;
-				bestPath = i;
-			}
-			this.restore();
+		this.cardsAutoCollect(true);
+		if(this.solveCache.key != this.readState('#cache')){
+			//如果缓存失效了，清除
+			this.solveCache = {};
 		}
+		var path = resolvePath(dept, this.solveCache);
 
-		if(bestPath != null){
-			if(paths && paths[bestPath]){
-				this.fire('befordSolve', {path:paths[bestPath]});
-				this.execPath(paths[bestPath], true);
-				this.fire('solved');
+		console.log(['搜索分支数：' + branches, '缓存的分支：' + cachedBranches]);
+		if(self.debug){
+			console.log(path);
+		}
+		if(path && path.length > 0){
+			this.fire('befordSolve', {path:path});
+			this.execPath(path, true);
+			this.solveCache.key = this.readState('#cache');	//增加一个key，以免cache失效
+			this.fire('solved');
+		}else{
+			if(this.parseResult()){
+				this.fire('success');
 			}else{
-				if(this.parseResult()){
-					//console.log("win");
-					this.fire('success');
-				}else{
-					//console.log("lose");
-					//this.fire('failed');
-					this.fire('solved');
-				}
+				//this.fire('failed');
+				this.fire('solved');
 			}
 		}
 	},
@@ -1040,8 +1124,9 @@ mix(Soltarie.prototype, {
 			var card = cards[i];
 			var str = '';
 			str = Soltarie.cardStr(card);
-			if(this.heapCursor == i) str = '<' + str + '>';
-			if(!this.isHeapVisible(i)) str = '[' + str + ']';
+			if(!this.isHeapVisible(i)) str = '(' + str + ')';
+			if(this.openedHeapCards.indexOf(card) == 0) str = str + '[';
+			if(this.openedHeapCards.indexOf(card) == this.openedHeapCards.length - 1) str = str + ']';
 			ret.push(str);
 		}
 		return ret.toString();					
