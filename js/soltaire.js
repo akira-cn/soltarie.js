@@ -223,6 +223,15 @@ mix(Soltarie.prototype, {
 			cards = Soltarie.cardRandomSort();
 		}
 
+		/*for(var i = 0; i < cards.length; i++){
+			var card = cards[i];
+			if(card >= 13 && card < 26){
+				card += 13;
+			}else if(card >= 26 && card < 39){
+				card -= 13;
+			}
+		}*/
+
 		this.cards = cards;
 
 		this.heap = [];	//牌堆
@@ -891,7 +900,11 @@ mix(Soltarie.prototype, {
 			}
 			
 			if(self.canMoveToCollection(card)){ //可以被移动到整理区
-				var path = solve(cards.slice(1), group);
+				if(cards.length > 1){
+					var path = solve(cards.slice(1), group);
+				}else{
+					path = [];
+				}
 				if(path){
 					path.push([card]);
 					return path;
